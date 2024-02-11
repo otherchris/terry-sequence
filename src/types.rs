@@ -2,12 +2,13 @@ use crate::MicrosDurationU32;
 use crate::{pac::I2C0, pac::I2C1, Alarm0, Alarm1, Alarm2, Alarm3, I2C};
 use crate::{RotaryEncoder, StandardMode};
 use mcp4725::MCP4725;
+use rp2040_hal::gpio::FunctionSioOutput;
 use rp2040_hal::{
     gpio::bank0::{
-        Gpio10, Gpio11, Gpio12, Gpio13, Gpio14, Gpio15, Gpio18, Gpio19, Gpio20, Gpio21, Gpio8,
-        Gpio9,
+        Gpio0, Gpio10, Gpio11, Gpio12, Gpio13, Gpio14, Gpio15, Gpio16, Gpio17, Gpio18, Gpio19,
+        Gpio2, Gpio20, Gpio21, Gpio3, Gpio8, Gpio9,
     },
-    gpio::{FunctionI2c, FunctionSioInput, FunctionUart, Pin, PullDown, PullUp},
+    gpio::{FunctionI2c, FunctionPio0, FunctionSioInput, FunctionUart, Pin, PullDown, PullUp},
     pac::UART1,
     uart::{Enabled, UartPeripheral},
 };
@@ -16,8 +17,17 @@ use ssd1306::prelude::I2CInterface;
 use ssd1306::size::DisplaySize128x32;
 use ssd1306::Ssd1306;
 
-pub type SdaPin = Pin<Gpio18, FunctionI2c, PullDown>;
-pub type SclPin = Pin<Gpio19, FunctionI2c, PullDown>;
+pub struct Counter {
+    pub pin0: Pin<Gpio19, FunctionSioOutput, PullDown>,
+    pub pin1: Pin<Gpio18, FunctionSioOutput, PullDown>,
+    pub pin2: Pin<Gpio17, FunctionSioOutput, PullDown>,
+    pub pin3: Pin<Gpio16, FunctionSioOutput, PullDown>,
+}
+
+pub type ClockIn = Pin<Gpio0, FunctionSioInput, PullUp>;
+
+pub type SdaPin = Pin<Gpio2, FunctionI2c, PullDown>;
+pub type SclPin = Pin<Gpio3, FunctionI2c, PullDown>;
 pub type I2C1Type = I2C<I2C1, (SdaPin, SclPin)>;
 
 pub type DacType = MCP4725<I2C1Type>;
@@ -46,19 +56,8 @@ pub type RotaryEncoder1Button = Pin<Gpio11, FunctionSioInput, PullUp>;
 pub type RotaryEncoder2Button = Pin<Gpio10, FunctionSioInput, PullUp>;
 
 pub struct ModuleState {
-    pub alarm_0_duration: MicrosDurationU32,
-    pub alarm_1_duration: MicrosDurationU32,
-    pub alarm_2_duration: MicrosDurationU32,
-    pub encoder_poll_duration: MicrosDurationU32,
-    pub alarm_0: Alarm0,
-    pub alarm_1: Alarm1,
-    pub alarm_2: Alarm2,
-    pub encoder_poll_alarm: Alarm3,
-    pub encoder_1: RotaryEncoder1,
-    pub encoder_1_button: RotaryEncoder1Button,
-    pub encoder_2: RotaryEncoder2,
-    pub encoder_2_button: RotaryEncoder2Button,
+    pub note: u16,
+    pub counter: Counter,
+    pub clock_in: ClockIn,
     pub dac: DacType,
-    pub display: Ssd1306<I2CInterface<DisplayI2c>, DisplaySize128x32, TerminalMode>,
-    pub uart_1: Uart1Type,
 }
