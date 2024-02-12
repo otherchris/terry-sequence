@@ -18,13 +18,19 @@ use ssd1306::size::DisplaySize128x32;
 use ssd1306::Ssd1306;
 
 pub struct Counter {
-    pub pin0: Pin<Gpio19, FunctionSioOutput, PullDown>,
-    pub pin1: Pin<Gpio18, FunctionSioOutput, PullDown>,
-    pub pin2: Pin<Gpio17, FunctionSioOutput, PullDown>,
-    pub pin3: Pin<Gpio16, FunctionSioOutput, PullDown>,
+    pub pin0: Pin<Gpio16, FunctionSioInput, PullUp>,
+    pub pin1: Pin<Gpio17, FunctionSioInput, PullUp>,
+    pub pin2: Pin<Gpio18, FunctionSioInput, PullUp>,
+    pub pin3: Pin<Gpio19, FunctionSioInput, PullUp>,
 }
 
 pub type ClockIn = Pin<Gpio0, FunctionSioInput, PullUp>;
+pub type ModePin = Pin<Gpio20, FunctionSioInput, PullUp>;
+pub type EnterPin = Pin<Gpio21, FunctionSioInput, PullUp>;
+pub enum Mode {
+    Input,
+    Run,
+}
 
 pub type SdaPin = Pin<Gpio2, FunctionI2c, PullDown>;
 pub type SclPin = Pin<Gpio3, FunctionI2c, PullDown>;
@@ -56,6 +62,9 @@ pub type RotaryEncoder1Button = Pin<Gpio11, FunctionSioInput, PullUp>;
 pub type RotaryEncoder2Button = Pin<Gpio10, FunctionSioInput, PullUp>;
 
 pub struct ModuleState {
+    pub mode: Mode,
+    pub mode_pin: ModePin,
+    pub enter_pin: EnterPin,
     pub note: u16,
     pub counter: Counter,
     pub clock_in: ClockIn,

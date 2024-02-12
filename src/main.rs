@@ -7,11 +7,11 @@ use core::cell::RefCell;
 use critical_section::Mutex;
 use defmt::*;
 use defmt_rtt as _;
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use fugit::{MicrosDurationU32, RateExtU32};
 use mcp4725::*;
 use panic_probe as _;
-use rp2040_hal::gpio::Interrupt::EdgeHigh;
+use rp2040_hal::gpio::Interrupt::{EdgeHigh, EdgeLow};
 use rp2040_hal::{
     clocks::init_clocks_and_plls,
     gpio::Pins,
@@ -30,7 +30,7 @@ use rp2040_hal::{
     gpio::bank0::Gpio0,
     gpio::{FunctionSioInput, Pin, PullUp},
 };
-use types::{Counter, ModuleState};
+use types::{Counter, Mode, ModuleState};
 
 static mut MODULE_STATE: Mutex<RefCell<Option<ModuleState>>> = Mutex::new(RefCell::new(None));
 
@@ -63,11 +63,16 @@ fn main() -> ! {
     clock_in.set_interrupt_enabled(rp2040_hal::gpio::Interrupt::EdgeHigh, true);
 
     let counter = Counter {
-        pin0: pins.gpio19.into_push_pull_output(),
-        pin1: pins.gpio18.into_push_pull_output(),
-        pin2: pins.gpio17.into_push_pull_output(),
-        pin3: pins.gpio16.into_push_pull_output(),
+        pin0: pins.gpio16.into_pull_up_input(),
+        pin1: pins.gpio17.into_pull_up_input(),
+        pin2: pins.gpio18.into_pull_up_input(),
+        pin3: pins.gpio19.into_pull_up_input(),
     };
+
+    let enter_pin = pins.gpio21.into_pull_up_input();
+    enter_pin.set_interrupt_enabled(rp2040_hal::gpio::Interrupt::EdgeLow, true);
+    let mode_pin = pins.gpio20.into_pull_up_input();
+    mode_pin.set_interrupt_enabled(rp2040_hal::gpio::Interrupt::EdgeLow, true);
 
     info!("set up i2c1");
     let scl = pins.gpio3.into_function();
@@ -86,6 +91,9 @@ fn main() -> ! {
     critical_section::with(|cs| {
         unsafe {
             MODULE_STATE.borrow(cs).replace(Some(ModuleState {
+                mode: Mode::Input,
+                mode_pin,
+                enter_pin,
                 clock_in,
                 counter,
                 dac,
@@ -98,6 +106,31 @@ fn main() -> ! {
 
     loop {}
 }
+
+fn counter_value(counter: &Counter) -> u16 {
+    let mut val = 0;
+    if counter.pin0.is_high().unwrap() {
+        val = val + 1;
+    }
+    if counter.pin1.is_high().unwrap() {
+        val = val + 2;
+    }
+    if counter.pin2.is_high().unwrap() {
+        val = val + 4;
+    }
+    if counter.pin3.is_high().unwrap() {
+        val = val + 8;
+    }
+    val
+}
+
+fn mode_msg(mode: &Mode) {
+    match mode {
+        Mode::Input => "INPUT",
+        Mode::Run => "RUN",
+    };
+}
+
 #[interrupt]
 fn IO_IRQ_BANK0() {
     critical_section::with(|cs| {
@@ -107,16 +140,32 @@ fn IO_IRQ_BANK0() {
             mut clock_in,
             mut counter,
             mut dac,
+            mut enter_pin,
+            mut mode,
             ..
         } = module_state;
-        if clock_in.interrupt_status(EdgeHigh) {
-            note = (note + 208) % 2496;
-            dac.set_dac_fast(PowerDown::Normal, note);
-            clock_in.clear_interrupt(EdgeHigh);
+        match mode {
+            Mode::Run => {
+                if clock_in.interrupt_status(EdgeHigh) {
+                    dac.set_dac_fast(PowerDown::Normal, note);
+                    clock_in.clear_interrupt(EdgeHigh);
+                }
+            }
+            Mode::Input => {}
+        }
+        if enter_pin.interrupt_status(EdgeLow) {
+            match mode {
+                Mode::Input => mode = Mode::Run,
+                Mode::Run => mode = Mode::Input,
+            }
+            enter_pin.clear_interrupt(EdgeLow);
+            info!("Mode: {}", mode_msg(&mode))
         }
         unsafe {
             MODULE_STATE.borrow(cs).replace(Some(ModuleState {
-                note,
+                notes,
+                mode,
+                enter_pin,
                 dac,
                 clock_in,
                 counter,
